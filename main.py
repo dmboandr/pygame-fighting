@@ -61,7 +61,12 @@ class Character(pygame.sprite.Sprite):
 
         self.attack_speed = 60  # сколько длится состояние атаки в фреймах
         self.attack_time = self.attack_speed  # сколько мы находимся в состоянии атаки
-
+        # для отталкивания
+        self.knockback = False
+        self.knockback_direction = 1
+        self.knockback_speed = 0
+        self.knockback_duration = 0
+        self.knockback_cooldown = 0
 
         # стрельба
         self.is_shooting = False
@@ -107,6 +112,21 @@ class Character(pygame.sprite.Sprite):
         dx = 0
         dy = 0
 
+        # Обработка отталкивания
+        if self.knockback:
+            if self.knockback_duration > 0:
+                dx += self.knockback_speed * self.knockback_direction
+                self.knockback_duration -= 1
+                # Постепенное замедление отталкивания
+                self.knockback_speed *= 0.9
+            else:
+                self.knockback = False
+                self.knockback_speed = 0
+
+        # Снижение кулдауна отталкивания
+        if self.knockback_cooldown > 0:
+            self.knockback_cooldown -= 1
+
         if self.jump_velocity > 10:
             self.jump_velocity = 10
 
@@ -125,28 +145,37 @@ class Character(pygame.sprite.Sprite):
             dy = 422 - self.rect.bottom
             self.in_air = False
 
-        # движение игрока
-        if self.moving_left and self.action != 4:
-            dx -= self.speed
-            self.flip = True
-            self.direction = -1
-            self.update_action(new_action=1)
-        elif self.moving_right and self.action != 4:
-            dx += self.speed
-            self.flip = False
-            self.direction = 1
-            self.update_action(new_action=1)
+        # Движение игрока (если нет отталкивания или оно закончилось)
+        if not self.knockback:
+            if self.moving_left and self.action != 4:
+                dx -= self.speed
+                self.flip = True
+                self.direction = -1
+                self.update_action(new_action=1)
+            elif self.moving_right and self.action != 4:
+                dx += self.speed
+                self.flip = False
+                self.direction = 1
+                self.update_action(new_action=1)
 
         # проверка на выход игрока за края экрана
-        if ((self.rect.right >= screen.get_width() and self.moving_right) or
-                (self.rect.left <= 0 and self.moving_left)):
+        if ((self.rect.right >= screen.get_width() and dx > 0) or
+                (self.rect.left <= 0 and dx < 0)):
             dx = 0  # опять сбрасываем наше изменение по x на 0
+            # Если ударились о стену во время отталкивания - останавливаем его
+            if self.knockback:
+                self.knockback = False
+                self.knockback_duration = 0
 
         #  применение изменений в координатах игрока
         self.rect.x += dx
         self.rect.y += dy
 
     def ai(self, target):
+        # Не двигаться во время отталкивания
+        if self.knockback:
+            return
+
         # движение бота
         if abs(self.rect.x - target.rect.x) < 40:
             self.attack(target)
@@ -161,6 +190,14 @@ class Character(pygame.sprite.Sprite):
         self.ai_moving_timer -= 1
         # 1   0
 
+    def apply_knockback(self, direction, force=10, duration=15):
+        """Применяет отталкивание к персонажу"""
+        if not self.knockback and self.knockback_cooldown == 0:
+            self.knockback = True
+            self.knockback_direction = direction
+            self.knockback_speed = force
+            self.knockback_duration = duration
+            self.knockback_cooldown = 30  # Защита от частых отталкиваний
 
     def crop_transparent(self, image):
         """Обрезает прозрачные края у изображения"""
@@ -191,6 +228,11 @@ class Character(pygame.sprite.Sprite):
             if self.attack_hitbox.colliderect(target.rect):
                 target.health -= 50
 
+                knockback_direction = 1 if self.rect.x < target.rect.x else -1
+                target.apply_knockback(knockback_direction, force=15, duration=20)
+                # Также отталкиваем атакующего (реакция от удара)
+                self.apply_knockback(-knockback_direction, force=5, duration=10)
+
 
     def update_animation(self):
         self.animation_cooldown += 1
@@ -216,7 +258,8 @@ class Character(pygame.sprite.Sprite):
 
     def update(self):
         if self.alive:
-
+            if self.knockback:
+                self.update_action(new_action=2)  # Jump анимация для эффекта отбрасывания
             #screen.blit(self.surf, self.attack_hitbox)
 
             if self.health <= 0:
