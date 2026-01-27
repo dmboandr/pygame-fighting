@@ -32,6 +32,9 @@ jump_sound.set_volume(0.8)  # 1 - 100%, 0.05 = 5%
 shot_sound = pygame.mixer.Sound("audio/shot.wav")
 shot_sound.set_volume(0.5)  # 1 - 100%, 0.05 = 5%
 
+# тексты
+text_font = pygame.font.Font("Fonts/BitcountGridSingle-VariableFont_CRSV,ELSH,ELXP,slnt,wght.ttf", 40)
+
 # переменные для игры
 endgame_timer = 120
 game_active = True
@@ -58,6 +61,8 @@ class Character(pygame.sprite.Sprite):
         self.is_attacking = False
         self.attack_cooldown = 0  # как часто мы можем нажимать на атаку
         self.attack_delay = 60
+
+
 
         self.attack_speed = 60  # сколько длится состояние атаки в фреймах
         self.attack_time = self.attack_speed  # сколько мы находимся в состоянии атаки
@@ -107,6 +112,10 @@ class Character(pygame.sprite.Sprite):
 
         self.surface = self.animation_list[self.action][self.animation_index]
         self.rect = self.surface.get_rect(bottomleft=(x, y))
+
+        self.attack_hitbox = pygame.rect.Rect(self.rect.x, self.rect.y, 50, 50)
+        self.attack_hitbox_surf = pygame.surface.Surface(size=(self.attack_hitbox.width, self.attack_hitbox.height))
+        self.attack_hitbox_surf.fill((255, 0, 0))
 
     def move(self):
         dx = 0
@@ -220,10 +229,14 @@ class Character(pygame.sprite.Sprite):
         if self.attack_cooldown == 0:  # если счётчик равен 0
             self.is_attacking = True  # я перехожу в состояние атаки
             self.attack_cooldown = self.attack_delay  # сразу же меняю счётчик
-            self.surf = pygame.surface.Surface(size=(self.rect.width, self.rect.height))
+            #self.surf = pygame.surface.Surface(size=(self.rect.width, self.rect.height))
             # (self.rect.x + ((self.rect.width//2 + 30) * self.direction)
-            self.attack_hitbox = self.surf.get_rect(topleft=(self.rect.x + (self.rect.width * self.direction), self.rect.y))
-            self.surf.fill((255, 0, 0))
+            if self.direction == 1:
+                coef = 45
+            else:
+                coef = 5
+            self.attack_hitbox = pygame.rect.Rect(self.rect.x + (coef * self.direction), self.rect.y, 40, 80)
+            #self.surf.fill((255, 0, 0))
 
             if self.attack_hitbox.colliderect(target.rect):
                 target.health -= 50
@@ -309,15 +322,26 @@ class Character(pygame.sprite.Sprite):
         #self.test_rect()
         self.move()
 
+
     def test_rect(self):
-        self.square_surf = pygame.surface.Surface(size=(self.surface.get_width() + 3, self.surface.get_height() + 3))
-        self.square_surf.fill((255, 0, 0))
-        self.square_rect = self.square_surf.get_rect(bottomleft=(self.rect.x, self.rect.y + self.surface.get_height()))
-        screen.blit(self.square_surf, self.square_rect)
-        print(player.rect.x, player.rect.y)
+        # self.square_surf = pygame.surface.Surface(size=(self.surface.get_width() + 3, self.surface.get_height() + 3))
+        # self.square_surf.fill((255, 0, 0))
+        # self.square_rect = self.square_surf.get_rect(bottomleft=(self.rect.x, self.rect.y + self.surface.get_height()))
+        # screen.blit(self.square_surf, self.square_rect)
+
+        coef = 0
+        if self.direction == 1:
+            coef = 45
+        else:
+            coef = 5
+        self.attack_hitbox = pygame.rect.Rect(self.rect.x + (coef * self.direction), self.rect.y, 40, 80)
+        self.attack_hitbox_surf = pygame.surface.Surface(size=(self.attack_hitbox.width, self.attack_hitbox.height))
+        self.attack_hitbox_surf.fill((255, 0, 0))
 
     def draw(self):
         screen.blit(pygame.transform.flip(self.surface, self.flip, False), self.rect)
+        #screen.blit(self.attack_hitbox_surf, self.attack_hitbox)
+
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -396,6 +420,25 @@ def restart():
     enemy_hp.health = 100
     character_group.add(player)
     character_group.add(enemy)
+
+
+def draw_result(player):
+    player_alive = player.alive
+
+    winner = "Player" if player_alive else "Enemy"
+
+    result_text = text_font.render(f"THE WINNER IS {winner}",
+                                   False,
+                                   (255, 0, 0))
+
+    screen.blit(result_text, (150, 40))
+
+    result_text = text_font.render(f"Press [SPACE] to start again!",
+                                   False,
+                                   (0, 255, 0))
+
+    screen.blit(result_text, (150, 80))
+
 
 
 player = Character(x=100, y=422, size=1.5, char_type="player")
@@ -493,6 +536,7 @@ while run:
     else:
         player.draw()
         enemy.draw()
+        draw_result(player)
 
     pygame.display.update()
     clock.tick(FPS)  # я гарантирую, что цикл не будет выполнять больше FPS раз
